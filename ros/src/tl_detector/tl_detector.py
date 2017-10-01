@@ -11,12 +11,13 @@ from light_classification.tl_classifier import TLClassifier
 import tf
 import cv2
 import yaml
+import numpy as np
 
 STATE_COUNT_THRESHOLD = 3
 
 class TLDetector(object):
     def __init__(self):
-        rospy.init_node('tl_detector')
+        rospy.init_node('tl_detector', log_level=rospy.DEBUG)
 
         self.pose = None
         self.waypoints = None
@@ -49,6 +50,9 @@ class TLDetector(object):
         self.last_state = TrafficLight.UNKNOWN
         self.last_wp = -1
         self.state_count = 0
+
+        self.image_count = 0
+        self.last_save_image = rospy.get_time()
 
         rospy.spin()
 
@@ -94,7 +98,7 @@ class TLDetector(object):
     def get_distance(self, ax, ay, bx, by):
         return math.sqrt((ax-bx)**2 + (ay-by)**2)
 
-    def get_closest_waypoint(self, pose):
+    def get_closest_waypoint(self, x, y):
         """Identifies the closest path waypoint to the given position
             https://en.wikipedia.org/wiki/Closest_pair_of_points_problem
         Args:
@@ -107,15 +111,30 @@ class TLDetector(object):
         closest = float('inf')
         index = 0
         for i in range(1, len(self.waypoints)):
-            a = pose.position
-            b = self.waypoints[i].pose.pose.position
-            dist = self.get_distance(a.x, a.y, b.x, b.y)
+            wp = self.waypoints[i].pose.pose.position
+            dist = self.get_distance(x, y, wp.x, wp.y)
             if dist < closest:
                 closest = dist
                 index = i
 
         return index
 
+    def save_image(self, light):
+
+        if rospy.get_time() - self.last_save_image < 2.0:
+            return
+
+        self.last_save_image = rospy.get_time()
+
+        cv_image = self.bridge.imgmsg_to_cv2(self.camera_image, "bgr8")
+
+        folder = 'images/red/' if light.state == TrafficLight.RED else 'images/green/'
+
+        img_path = folder+'img{}.jpg'.format(self.image_count)
+        self.image_count += 1
+        cv2.imwrite(img_path, cv_image)
+
+        rospy.logdebug('Image {} saved'.format(img_path))
 
     def project_to_image_plane(self, point_in_world):
         """Project point from 3D world coordinates to 2D camera image location
@@ -136,6 +155,7 @@ class TLDetector(object):
 
         # get transform between pose of camera and world frame
         trans = None
+        rot = None
         try:
             now = rospy.Time.now()
             self.listener.waitForTransform("/base_link",
@@ -146,10 +166,16 @@ class TLDetector(object):
         except (tf.Exception, tf.LookupException, tf.ConnectivityException):
             rospy.logerr("Failed to find camera to map transform")
 
-        #TODO Use tranform and rotation to calculate 2D position of light in image
+        if not trans or not rot:
+            return (0,0)
 
-        x = 0
-        y = 0
+        point_in_world_vec = np.array([point_in_world.x, point_in_world.y, point_in_world.z, 1.0]).transpose()
+        transRotation = self.listener.fromTranslationRotation(trans, rot)
+
+        point_on_image = np.dot(point_in_world_vec, transRotation)
+        x, y, z = point_on_image[0], point_on_image[1], point_on_image[2]
+        x = int(-fx * y / x + 0.5 * image_width)
+        y = int(-fy * z / x + 0.5 * image_height)
 
         return (x, y)
 
@@ -172,7 +198,6 @@ class TLDetector(object):
         x, y = self.project_to_image_plane(light.pose.pose.position)
 
         #TODO use light location to zoom in on traffic light in image
-
         #Get classification
         return self.light_classifier.get_classification(cv_image)
 
@@ -194,21 +219,24 @@ class TLDetector(object):
         # List of positions that correspond to the line to stop in front of for a given intersection
         stop_line_positions = self.config['stop_line_positions']
 
-        car_wp = self.get_closest_waypoint(self.pose.pose)
-        car_position = self.waypoints[car_wp].pose.pose.position
+        car_position = self.pose.pose.position
+        car_wp = self.get_closest_waypoint(car_position.x, car_position.y)
 
+        index = 0
         dist = float('inf')
         for i, l in enumerate(stop_line_positions):
             cur_dist = self.get_distance(car_position.x, car_position.y, l[0], l[1])
             if cur_dist < dist:
                 dist = cur_dist
                 light = self.lights[i]
+                index = i
 
-        light_wp = self.get_closest_waypoint(light.pose.pose)
-        if light and car_wp < light_wp:
-            state = self.get_light_state(light)
+        light_wp = self.get_closest_waypoint(stop_line_positions[index][0], stop_line_positions[index][1])
+        if light and car_wp < light_wp and light_wp - car_wp < 200:
+            self.save_image(light)
+            #state = self.get_light_state(light)
             state = light.state
-            rospy.logdebug('Light {}, State is {}'.format(light_wp, state))
+            #rospy.logdebug('Light {}, State is {}'.format(light_wp, state))
             return light_wp, state
 
         return -1, TrafficLight.UNKNOWN

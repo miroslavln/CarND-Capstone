@@ -24,8 +24,7 @@ TODO (for Yousuf and Aaron): Stopline location for each traffic light.
 '''
 
 LOOKAHEAD_WPS = 200  # Number of waypoints we will publish. You can change this number
-
-STOP_LINE_DISTANCE = 30.0
+DISTANCE_TO_LINE = 4.0
 DECELERATION = 0.5  # m/s^2
 
 
@@ -96,7 +95,7 @@ class WaypointUpdater(object):
 
         self.final_waypoints_pub.publish(final_waypoints_msg)
 
-        rospy.logdebug_throttle(1, 'Position {}'.format(index))
+        rospy.logdebug_throttle(1, 'Position {}, Light {}'.format(index, self.light_wp - index))
 
     def adjust_velocity(self, waypoints, index):
         if self.light_wp < 0 or self.light_wp - index >= len(waypoints):
@@ -106,32 +105,30 @@ class WaypointUpdater(object):
 
         for i, waypoint in enumerate(waypoints):
             dist = self.get_distance(waypoint.pose.pose.position, light.pose.pose.position)
-            dist -= STOP_LINE_DISTANCE
+            dist -= DISTANCE_TO_LINE
 
-            if dist < -STOP_LINE_DISTANCE / 2:
-                continue
-
-            if dist < 0.0:
+            wp = index + i
+            if wp > self.light_wp or dist < 0.0:
                 velocity = 0.0
             else:
                 # https://www.johannes-strommer.com/diverses/pages-in-english/stopping-distance-acceleration-speed/
                 velocity = math.sqrt(2 * DECELERATION * dist)
-                velocity = max(0.0, velocity)
+                # don't want to exceed the maximum velocity provided in the way point
                 velocity = min(velocity, self.get_waypoint_velocity(waypoint))
 
-            velocity = max(0.0, velocity)
+            if velocity < 1.0:
+                velocity = 0.0
+
             self.set_waypoint_velocity(waypoints, i, velocity)
 
         return waypoints
 
     def get_final_waypoints(self, index):
-        #return copy.deepcopy(self.base_waypoints[index:index+LOOKAHEAD_WPS])
         res = []
         for i in range(LOOKAHEAD_WPS):
             wp = self.base_waypoints[(index + i) % len(self.base_waypoints)]
             res.append(copy.deepcopy(wp))
         return res
-
 
     def pose_cb(self, msg):
         self.pose = msg.pose

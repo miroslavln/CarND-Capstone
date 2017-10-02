@@ -48,7 +48,6 @@ generator = ImageDataGenerator(height_shift_range=0.3, width_shift_range=0.3)
 
 images = generator.flow_from_directory('../images', target_size=(64, 64), batch_size=batch_size)
 
-
 model.fit_generator(images, epochs=1, steps_per_epoch=300)
 
 model.save('model.h5')

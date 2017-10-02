@@ -76,7 +76,7 @@ class WaypointUpdater(object):
         return index
 
     def run(self):
-        rate = rospy.Rate(10)
+        rate = rospy.Rate(50)
 
         while not rospy.is_shutdown():
             self.publish()

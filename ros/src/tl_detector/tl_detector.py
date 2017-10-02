@@ -236,10 +236,7 @@ class TLDetector(object):
 
         if light and car_wp < light_wp and light_wp - car_wp < 200:
             state = self.get_light_state(light)
-            #state = light.state
-            if bool(state) != bool(light.state):
-                self.save_image(light)
-                rospy.logdebug_throttle(1, 'Light {}, State is {}/{}'.format(light_wp, state, light.state))
+            rospy.logdebug_throttle(1, 'Light {}, State is {}/{}'.format(light_wp, state, light.state))
 
             if state != TrafficLight.UNKNOWN:
                 return light_wp, state

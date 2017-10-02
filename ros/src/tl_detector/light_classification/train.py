@@ -1,7 +1,7 @@
 from keras.preprocessing.image import ImageDataGenerator
 from keras.layers import Activation, Dropout, Conv2D, MaxPooling2D, Flatten, Dense, BatchNormalization, ELU
 
-from keras.models import Sequential
+from keras.models import Sequential, load_model
 import os
 
 classes = 2
@@ -42,16 +42,14 @@ model.add(Activation('softmax'))
 model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
 
 if os.path.exists('model.h5'):
-    model.load_weights('model.h5')
+    model = load_model('model.h5')
 
 generator = ImageDataGenerator(height_shift_range=0.3, width_shift_range=0.3)
 
 images = generator.flow_from_directory('../images', target_size=(64, 64), batch_size=batch_size)
 
 
-model.fit_generator(images, epochs=25, steps_per_epoch=400)
+model.fit_generator(images, epochs=1, steps_per_epoch=300)
 
-model.save_weights('model.h5')
-with open('model.json', 'w') as json_file:
-    model_json = model.to_json()
-    json_file.write(model_json)
+model.save('model.h5')
+

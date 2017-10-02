@@ -15,7 +15,7 @@ class Controller(object):
         self.wheel_radius = wheel_radius
 
         self.steering_controller = YawController(wheel_base, steer_ratio, min_speed, max_lat_accel, max_steer_angle)
-        self.speed_pid = PID(5.0, 0.001, 0.5, mn=decel_limit, mx=accel_limit)
+        self.speed_pid = PID(5.0, 0.0001, 0.5, mn=decel_limit, mx=accel_limit)
 
 
     def control(self, cur_linear, cur_ang, target_linear, target_ang, time):

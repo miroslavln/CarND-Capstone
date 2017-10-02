@@ -3,6 +3,8 @@ from pid import  PID
 from lowpass import LowPassFilter
 import rospy
 
+MAX_SPEED_MPS = 44
+
 GAS_DENSITY = 2.858
 ONE_MPH = 0.44704
 
@@ -20,21 +22,23 @@ class Controller(object):
 
     def control(self, cur_linear, cur_ang, target_linear, target_ang, time):
         speed_error = target_linear.x - cur_linear.x
-        throttle = self.speed_pid.step(speed_error, time)
+        acc = self.speed_pid.step(speed_error, time)
 
         steer = self.steering_controller.get_steering(target_linear.x, target_ang.z, cur_linear.x)
 
         brk = 0
-        if throttle < 0.0:
-            brk = -throttle
+        if acc < 0.0:
+            brk = -acc
             throttle = 0.0
 
             brk = brk * self.vehicle_mass * self.wheel_radius
+        else:
+            throttle = (cur_linear.x + acc) / MAX_SPEED_MPS
 
         rospy.logdebug_throttle(2, 'cur {}, target {}, throttle {}, break {}, steer {}'.format(
             cur_linear.x, target_linear.x, throttle, brk, steer))
 
-        return throttle, brk, steer
+        return acc, brk, steer
 
     def reset(self):
         self.speed_pid.reset()

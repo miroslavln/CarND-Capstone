@@ -85,18 +85,18 @@ class DBWNode(object):
         rate = rospy.Rate(50) # 50Hz
         while not rospy.is_shutdown():
             if self.cur_linear and self.target_linear:
-                time_elapsed = rospy.get_time() - self.last_time
-                self.last_time = rospy.get_time()
-
-                throttle, brake, steering = self.controller.control(self.cur_linear, self.cur_ang,
-                                                                    self.target_linear, self.target_ang,
-                                                                    time_elapsed)
-
                 # You should only publish the control commands if dbw is enabled
                 if self.dwb_enabled:
+                    time_elapsed = rospy.get_time() - self.last_time
+                    throttle, brake, steering = self.controller.control(self.cur_linear, self.cur_ang,
+                                                                        self.target_linear, self.target_ang,
+                                                                        time_elapsed)
+
                     self.publish(throttle, brake, steering)
                 else:
                     self.controller.reset()
+
+                self.last_time = rospy.get_time()
 
             rate.sleep()
 

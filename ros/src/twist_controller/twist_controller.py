@@ -1,6 +1,5 @@
 from yaw_controller import YawController
 from pid import  PID
-from lowpass import LowPassFilter
 import rospy
 
 MAX_SPEED_MPS = 44
@@ -31,6 +30,7 @@ class Controller(object):
             brk = -acc
             throttle = 0.0
 
+            #http://www.asawicki.info/Mirror/Car%20Physics%20for%20Games/Car%20Physics%20for%20Games.html
             brk = brk * self.vehicle_mass * self.wheel_radius
         else:
             throttle = (cur_linear.x + acc) / MAX_SPEED_MPS

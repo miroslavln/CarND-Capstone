@@ -2,7 +2,8 @@ from yaw_controller import YawController
 from pid import  PID
 import rospy
 
-MAX_SPEED_MPS = 44
+MAX_TORQUE = 375  # NM this is from the specification for LINCOLN MKZ found online
+
 
 GAS_DENSITY = 2.858
 ONE_MPH = 0.44704
@@ -25,20 +26,21 @@ class Controller(object):
 
         steer = self.steering_controller.get_steering(target_linear.x, target_ang.z, cur_linear.x)
 
-        brk = 0
-        if acc < 0.0:
-            brk = -acc
-            throttle = 0.0
+        #  http://www.asawicki.info/Mirror/Car%20Physics%20for%20Games/Car%20Physics%20for%20Games.html
+        # torque = force * wheel_radius = mass * acceleration * wheel_radius
+        torque = abs(acc) * self.vehicle_mass * self.wheel_radius
 
-            #http://www.asawicki.info/Mirror/Car%20Physics%20for%20Games/Car%20Physics%20for%20Games.html
-            brk = brk * self.vehicle_mass * self.wheel_radius
+        brk = 0.0
+        if acc < 0.0:
+            throttle = 0.0
+            brk = torque
         else:
-            throttle = (cur_linear.x + acc) / MAX_SPEED_MPS
+            throttle = min(torque / MAX_TORQUE, 0.8)  # convert to throttle percentage without going over 80%
 
         rospy.logdebug_throttle(2, 'cur {}, target {}, throttle {}, break {}, steer {}'.format(
             cur_linear.x, target_linear.x, throttle, brk, steer))
 
-        return acc, brk, steer
+        return throttle, brk, steer
 
     def reset(self):
         self.speed_pid.reset()

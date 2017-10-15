@@ -17,7 +17,7 @@ STATE_COUNT_THRESHOLD = 3
 
 class TLDetector(object):
     def __init__(self):
-        rospy.init_node('tl_detector')
+        rospy.init_node('tl_detector', log_level=rospy.DEBUG)
 
         self.pose = None
         self.waypoints = None
@@ -199,10 +199,10 @@ class TLDetector(object):
 
         cv_image = self.bridge.imgmsg_to_cv2(self.camera_image, "bgr8")
 
-        x, y = self.project_to_image_plane(light.pose.pose.position)
+        #x, y = self.project_to_image_plane(light.pose.pose.position)
 
-        if x == -1 or y == -1:
-            return TrafficLight.UNKNOWN
+        #if x == -1 or y == -1:
+        #    return TrafficLight.UNKNOWN
 
         return self.light_classifier.get_classification(cv_image)
 

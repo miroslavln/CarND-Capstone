@@ -1,6 +1,7 @@
-#from styx_msgs.msg import TrafficLight
+from styx_msgs.msg import TrafficLight
 import numpy as np
 import tensorflow as tf
+import os
 
 real_model = 'frozen_models/real_data/frozen_inference_graph.pb'
 sim_model = 'frozen_models/sim_data/frozen_inference_graph.pb'
@@ -10,15 +11,17 @@ class TLClassifier(object):
     def __init__(self):
         graph = tf.Graph()
         od_graph_def = tf.GraphDef()
+        dir = os.path.dirname(__file__)
 
-        with tf.gfile.GFile(sim_model, 'rb') as fid:
+        file_name = os.path.join(dir, sim_model)
+        with tf.gfile.GFile(file_name, 'rb') as fid:
             serialized_graph = fid.read()
             od_graph_def.ParseFromString(serialized_graph)
             graph = tf.import_graph_def(od_graph_def, name='')
 
         self.sess = tf.Session(graph=graph)
 
-    def convert_traffic_color(self, id):
+    def convert_to_traffic_color(self, id):
         if id == 1:
             return TrafficLight.GREEN
         if id == 2:
@@ -47,14 +50,13 @@ class TLClassifier(object):
         image = np.expand_dims(image, axis=0)
         boxes, scores, classes, num = self.sess.run([detection_boxes, detection_scores,
                                                 detection_classes, num_detections],
-                                               feed_dict={image_tensor: image})
+                                                feed_dict={image_tensor: image})
         boxes = np.squeeze(boxes)
         scores = np.squeeze(scores)
         classes = np.squeeze(classes).astype(np.int32)
 
         index = np.argmax(scores)
         if scores[index] > 0.5:
-            return classes[index]
+            return self.convert_to_traffic_color(classes[index])
 
-        return -1
         return TrafficLight.UNKNOWN

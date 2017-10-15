@@ -1,14 +1,32 @@
-from styx_msgs.msg import TrafficLight
-from keras.models import load_model
-import cv2
+#from styx_msgs.msg import TrafficLight
 import numpy as np
 import tensorflow as tf
 
-graph = []
+real_model = 'frozen_models/real_data/frozen_inference_graph.pb'
+sim_model = 'frozen_models/sim_data/frozen_inference_graph.pb'
+
+
 class TLClassifier(object):
     def __init__(self):
-        self.model = load_model('light_classification/model.h5')
-        graph.append(tf.get_default_graph())
+        graph = tf.Graph()
+        od_graph_def = tf.GraphDef()
+
+        with tf.gfile.GFile(sim_model, 'rb') as fid:
+            serialized_graph = fid.read()
+            od_graph_def.ParseFromString(serialized_graph)
+            graph = tf.import_graph_def(od_graph_def, name='')
+
+        self.sess = tf.Session(graph=graph)
+
+    def convert_traffic_color(self, id):
+        if id == 1:
+            return TrafficLight.GREEN
+        if id == 2:
+            return TrafficLight.RED
+        if id == 3:
+            return TrafficLight.YELLOW
+
+        return TrafficLight.UNKNOWN
 
     def get_classification(self, image):
         """Determines the color of the traffic light in the image
@@ -20,14 +38,23 @@ class TLClassifier(object):
             int: ID of traffic light color (specified in styx_msgs/TrafficLight)
 
         """
-        global graph
-        with graph[0].as_default():
-            image = cv2.resize(image, (64, 64), interpolation=cv2.INTER_AREA)
-            transformed_image_array = image[None, :, :, :]
-            light = self.model.predict(transformed_image_array, batch_size=1).squeeze()
+        image_tensor = self.sess.graph.get_tensor_by_name('image_tensor:0')
+        detection_boxes = self.sess.graph.get_tensor_by_name('detection_boxes:0')
+        detection_scores = self.sess.graph.get_tensor_by_name('detection_scores:0')
+        detection_classes = self.sess.graph.get_tensor_by_name('detection_classes:0')
+        num_detections = self.sess.graph.get_tensor_by_name('num_detections:0')
 
-            cls = np.argmax(light)
-            if cls == 1:
-                return TrafficLight.RED
+        image = np.expand_dims(image, axis=0)
+        boxes, scores, classes, num = self.sess.run([detection_boxes, detection_scores,
+                                                detection_classes, num_detections],
+                                               feed_dict={image_tensor: image})
+        boxes = np.squeeze(boxes)
+        scores = np.squeeze(scores)
+        classes = np.squeeze(classes).astype(np.int32)
 
-            return TrafficLight.UNKNOWN
+        index = np.argmax(scores)
+        if scores[index] > 0.5:
+            return classes[index]
+
+        return -1
+        return TrafficLight.UNKNOWN

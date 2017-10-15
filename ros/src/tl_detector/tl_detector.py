@@ -170,7 +170,7 @@ class TLDetector(object):
         if not trans or not rot:
             return (0,0)
 
-        point_in_world_vec = np.array([point_in_world.x, point_in_world.y, point_in_world.z, 1.0]).transpose()
+        point_in_world_vec = np.array([[point_in_world.x, point_in_world.y, point_in_world.z, 1.0]]).transpose()
         transRotation = self.listener.fromTranslationRotation(trans, rot)
 
         point_on_image = np.dot(point_in_world_vec, transRotation)
@@ -178,7 +178,10 @@ class TLDetector(object):
         x = int(-fx * y / x + 0.5 * image_width)
         y = int(-fy * z / x + 0.5 * image_height)
 
-        return (x, y)
+        if 0 <= x < image_width and 0 <= y < image_height:
+            return x, y
+
+        return -1, -1
 
     def get_light_state(self, light):
         """Determines the current color of the traffic light
@@ -196,10 +199,11 @@ class TLDetector(object):
 
         cv_image = self.bridge.imgmsg_to_cv2(self.camera_image, "bgr8")
 
-        #x, y = self.project_to_image_plane(light.pose.pose.position)
+        x, y = self.project_to_image_plane(light.pose.pose.position)
 
-        #TODO use light location to zoom in on traffic light in image
-        #Get classification
+        if x == -1 or y == -1:
+            return TrafficLight.UNKNOWN
+
         return self.light_classifier.get_classification(cv_image)
 
     def process_traffic_lights(self):
@@ -238,7 +242,7 @@ class TLDetector(object):
             state = self.get_light_state(light)
             rospy.logdebug_throttle(1, 'Light {}, State is {}/{}'.format(light_wp, state, light.state))
 
-            if state != TrafficLight.UNKNOWN:
+            if state == TrafficLight.RED:
                 return light_wp, state
 
         return -1, TrafficLight.UNKNOWN

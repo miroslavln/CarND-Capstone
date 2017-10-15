@@ -1,9 +1,21 @@
+from glob import glob
+
+import os
 from tl_classifier import TLClassifier
 import cv2
 
 classfier = TLClassifier()
-test_image_red = cv2.imread('../images/red/img0.jpg')
-print(classfier.get_classification(test_image_red))
 
-test_image_green = cv2.imread('../images/green/img281.jpg')
-print(classfier.get_classification(test_image_green))
+
+def classify_images(images_folder):
+    image_paths = glob(os.path.join(images_folder, '*.jpg'))
+    for image_path in image_paths:
+        test_image = cv2.imread(image_path)
+        print(classfier.get_classification(test_image))
+
+
+print('Red images')
+classify_images('../images/red')
+
+print('Green images')
+classify_images('../images/green')

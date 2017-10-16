@@ -15,6 +15,7 @@ import numpy as np
 
 STATE_COUNT_THRESHOLD = 3
 
+
 class TLDetector(object):
     def __init__(self):
         rospy.init_node('tl_detector', log_level=rospy.DEBUG)
@@ -30,7 +31,7 @@ class TLDetector(object):
         self.upcoming_red_light_pub = rospy.Publisher('/traffic_waypoint', Int32, queue_size=1)
 
         self.bridge = CvBridge()
-        self.light_classifier = TLClassifier()
+        self.light_classifier = TLClassifier(self.config['model'])
         self.listener = tf.TransformListener()
 
         self.state = TrafficLight.UNKNOWN
@@ -55,6 +56,7 @@ class TLDetector(object):
         sub3 = rospy.Subscriber('/vehicle/traffic_lights', TrafficLightArray, self.traffic_cb)
         sub6 = rospy.Subscriber('/image_color', Image, self.image_cb)
 
+        self.light_states = {0: 'Red', 1: 'yellow', 2: 'Green', 3: 'Undefined', 4: 'Unknown'}
         rospy.spin()
 
     def pose_cb(self, msg):
@@ -97,7 +99,7 @@ class TLDetector(object):
         self.state_count += 1
 
     def get_distance(self, ax, ay, bx, by):
-        return math.sqrt((ax-bx)**2 + (ay-by)**2)
+        return math.sqrt((ax - bx) ** 2 + (ay - by) ** 2)
 
     def get_closest_waypoint(self, x, y):
         """Identifies the closest path waypoint to the given position
@@ -131,7 +133,7 @@ class TLDetector(object):
 
         folder = 'images/red/' if light.state == TrafficLight.RED else 'images/green/'
 
-        img_path = folder+'img{}.jpg'.format(self.image_count)
+        img_path = folder + 'img{}.jpg'.format(self.image_count)
         self.image_count += 1
         cv2.imwrite(img_path, cv_image)
 
@@ -160,15 +162,15 @@ class TLDetector(object):
         try:
             now = rospy.Time.now()
             self.listener.waitForTransform("/base_link",
-                  "/world", now, rospy.Duration(1.0))
+                                           "/world", now, rospy.Duration(1.0))
             (trans, rot) = self.listener.lookupTransform("/base_link",
-                  "/world", now)
+                                                         "/world", now)
 
         except (tf.Exception, tf.LookupException, tf.ConnectivityException):
             rospy.logerr("Failed to find camera to map transform")
 
         if not trans or not rot:
-            return (0,0)
+            return (0, 0)
 
         point_in_world_vec = np.array([[point_in_world.x, point_in_world.y, point_in_world.z, 1.0]]).transpose()
         transRotation = self.listener.fromTranslationRotation(trans, rot)
@@ -193,15 +195,15 @@ class TLDetector(object):
             int: ID of traffic light color (specified in styx_msgs/TrafficLight)
 
         """
-        if(not self.has_image):
+        if (not self.has_image):
             self.prev_light_loc = None
             return False
 
         cv_image = self.bridge.imgmsg_to_cv2(self.camera_image, "bgr8")
 
-        #x, y = self.project_to_image_plane(light.pose.pose.position)
+        # x, y = self.project_to_image_plane(light.pose.pose.position)
 
-        #if x == -1 or y == -1:
+        # if x == -1 or y == -1:
         #    return TrafficLight.UNKNOWN
 
         return self.light_classifier.get_classification(cv_image)
@@ -219,16 +221,17 @@ class TLDetector(object):
         if not self.pose or not self.waypoints or not self.lights:
             return -1, TrafficLight.UNKNOWN
 
+        time = rospy.get_time()
+
         light = None
 
         # List of positions that correspond to the line to stop in front of for a given intersection
         stop_line_positions = self.config['stop_line_positions']
 
         car_position = self.pose.pose.position
-        car_wp = self.get_closest_waypoint(car_position.x, car_position.y)
-
         index = 0
         dist = float('inf')
+
         for i, l in enumerate(stop_line_positions):
             cur_dist = self.get_distance(car_position.x, car_position.y, l[0], l[1])
             if cur_dist < dist:
@@ -238,14 +241,18 @@ class TLDetector(object):
 
         light_wp = self.get_closest_waypoint(stop_line_positions[index][0], stop_line_positions[index][1])
 
-        if light and car_wp < light_wp and light_wp - car_wp < 200:
+        if light:
             state = self.get_light_state(light)
-            rospy.logdebug_throttle(1, 'Light {}, State is {}/{}'.format(light_wp, state, light.state))
+            #state = light.state
+            rospy.logdebug_throttle(0.2, 'Light {}, State is {}/{} in {} ms'.format(light_wp, self.light_states[state],
+                                                                                    self.light_states[light.state],
+                                                                                    (rospy.get_time() - time) * 1000))
 
             if state == TrafficLight.RED:
                 return light_wp, state
 
         return -1, TrafficLight.UNKNOWN
+
 
 if __name__ == '__main__':
     try:

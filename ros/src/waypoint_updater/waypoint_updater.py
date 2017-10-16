@@ -98,7 +98,7 @@ class WaypointUpdater(object):
         rospy.logdebug_throttle(1, 'Position {}, Light {}'.format(index, self.light_wp - index))
 
     def adjust_velocity(self, waypoints, index):
-        if self.light_wp < 0 or self.light_wp - index >= len(waypoints):
+        if self.light_wp < 0 or self.light_wp < index or self.light_wp - index >= len(waypoints):
             return waypoints
 
         light = waypoints[self.light_wp - index]
@@ -107,14 +107,18 @@ class WaypointUpdater(object):
             dist = self.get_distance(waypoint.pose.pose.position, light.pose.pose.position)
             dist -= DISTANCE_TO_LINE
 
+            waypoint_velocity = self.get_waypoint_velocity(waypoint)
             wp = index + i
-            if wp > self.light_wp or dist < 0.0:
-                velocity = 0.0
+            if wp < self.light_wp:
+                if dist < 0.0:
+                    velocity = 0.0
+                else:
+                    # https://www.johannes-strommer.com/diverses/pages-in-english/stopping-distance-acceleration-speed/
+                    velocity = math.sqrt(2 * DECELERATION * dist)
+                    # don't want to exceed the maximum velocity provided in the way point
+                    velocity = min(velocity, waypoint_velocity)
             else:
-                # https://www.johannes-strommer.com/diverses/pages-in-english/stopping-distance-acceleration-speed/
-                velocity = math.sqrt(2 * DECELERATION * dist)
-                # don't want to exceed the maximum velocity provided in the way point
-                velocity = min(velocity, self.get_waypoint_velocity(waypoint))
+                velocity = waypoint_velocity
 
             if velocity < 1.0:
                 velocity = 0.0

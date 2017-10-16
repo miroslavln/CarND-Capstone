@@ -19,25 +19,26 @@ class Controller(object):
         self.brake_deadband = brake_deadband
 
         self.steering_controller = YawController(wheel_base, steer_ratio, min_speed, max_lat_accel, max_steer_angle)
-        self.speed_pid = PID(0.9, 0.0005, 0.07, mn=decel_limit, mx=accel_limit)
-        self.speed_lpf = LowPassFilter(0.2, 0.1)
+        self.acc_pid = PID(kp=1.0, ki=0.004, kd=0.1, mn=decel_limit, mx=accel_limit)
 
-    def control(self, cur_linear, cur_ang, target_linear, target_ang, time):
+    def control(self, cur_linear, cur_ang, target_linear, target_ang, dt):
         speed_error = target_linear.x - cur_linear.x
-        acc = self.speed_pid.step(speed_error, time)
-        acc = self.speed_lpf.filt(acc)
-
-        #  http://www.asawicki.info/Mirror/Car%20Physics%20for%20Games/Car%20Physics%20for%20Games.html
-        # torque = force * wheel_radius = mass * acceleration * wheel_radius
-        torque = abs(acc) * self.vehicle_mass * self.wheel_radius
 
         brake = 0.0
-        if acc < 0.01:
-            throttle = 0.0
-            if torque > self.brake_deadband:
-                brake = torque
+        throttle = 0.0
+
+        acc = self.acc_pid.step(speed_error, dt)
+
+        if speed_error < 0.0:
+            #  http://www.asawicki.info/Mirror/Car%20Physics%20for%20Games/Car%20Physics%20for%20Games.html
+            # torque = force * wheel_radius = mass * acceleration * wheel_radius
+            torque = abs(acc) * self.vehicle_mass * self.wheel_radius
+            brake = torque
         else:
-            throttle = acc #min(torque / MAX_TORQUE, MAX_THROTTLE_PERCENTAGE)
+            throttle = acc
+
+        if throttle < 0.01:
+            throttle = 0.0
 
         steer = self.steering_controller.get_steering(target_linear.x, target_ang.z, cur_linear.x)
 
@@ -47,4 +48,4 @@ class Controller(object):
         return throttle, brake, steer
 
     def reset(self):
-        self.speed_pid.reset()
+        self.acc_pid.reset()

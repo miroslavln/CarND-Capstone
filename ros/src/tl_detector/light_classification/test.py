@@ -3,6 +3,7 @@ from glob import glob
 import os
 from tl_classifier import TLClassifier
 import cv2
+import time
 
 classfier = TLClassifier()
 
@@ -15,7 +16,9 @@ def classify_images(images_folder):
 
 
 print('Red images')
+time = time.time()
 classify_images('../images/red')
 
 print('Green images')
 classify_images('../images/green')
+print(time.time() - time)

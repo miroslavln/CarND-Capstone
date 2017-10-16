@@ -1,35 +1,27 @@
 from styx_msgs.msg import TrafficLight
+import rospy
 import numpy as np
 import tensorflow as tf
 import os
 
-real_model = 'frozen_models/real_data/frozen_inference_graph.pb'
-sim_model = 'frozen_models/sim_data/frozen_inference_graph.pb'
-
-
 class TLClassifier(object):
-    def __init__(self):
-        graph = tf.Graph()
+    def __init__(self, model_path):
         od_graph_def = tf.GraphDef()
-        dir = os.path.dirname(__file__)
 
-        file_name = os.path.join(dir, sim_model)
+        dir = os.path.dirname(__file__)
+        file_name = os.path.join(dir, model_path)
+        rospy.loginfo('Using inference model: {}'.format(file_name))
         with tf.gfile.GFile(file_name, 'rb') as fid:
             serialized_graph = fid.read()
             od_graph_def.ParseFromString(serialized_graph)
-            graph = tf.import_graph_def(od_graph_def, name='')
+            self.graph = tf.import_graph_def(od_graph_def, name='')
 
-        self.sess = tf.Session(graph=graph)
+        self.sess = tf.Session(graph=self.graph)
+        self.image_tensor = self.sess.graph.get_tensor_by_name('image_tensor:0')
+        self.detection_scores = self.sess.graph.get_tensor_by_name('detection_scores:0')
+        self.detection_classes = self.sess.graph.get_tensor_by_name('detection_classes:0')
+        self.detection_boxes =  self.sess.graph.get_tensor_by_name('detection_boxes:0')
 
-    def convert_to_traffic_color(self, id):
-        if id == 1:
-            return TrafficLight.GREEN
-        if id == 2:
-            return TrafficLight.RED
-        if id == 3:
-            return TrafficLight.YELLOW
-
-        return TrafficLight.UNKNOWN
 
     def get_classification(self, image):
         """Determines the color of the traffic light in the image
@@ -41,22 +33,25 @@ class TLClassifier(object):
             int: ID of traffic light color (specified in styx_msgs/TrafficLight)
 
         """
-        image_tensor = self.sess.graph.get_tensor_by_name('image_tensor:0')
-        detection_boxes = self.sess.graph.get_tensor_by_name('detection_boxes:0')
-        detection_scores = self.sess.graph.get_tensor_by_name('detection_scores:0')
-        detection_classes = self.sess.graph.get_tensor_by_name('detection_classes:0')
-        num_detections = self.sess.graph.get_tensor_by_name('num_detections:0')
-
         image = np.expand_dims(image, axis=0)
-        boxes, scores, classes, num = self.sess.run([detection_boxes, detection_scores,
-                                                detection_classes, num_detections],
-                                                feed_dict={image_tensor: image})
-        boxes = np.squeeze(boxes)
+        scores, classes, boxes = self.sess.run([self.detection_scores, self.detection_classes, self.detection_boxes],
+                                       feed_dict={self.image_tensor: image})
         scores = np.squeeze(scores)
         classes = np.squeeze(classes).astype(np.int32)
+        boxes = np.squeeze(boxes)
 
         index = np.argmax(scores)
         if scores[index] > 0.5:
             return self.convert_to_traffic_color(classes[index])
+
+        return TrafficLight.UNKNOWN
+
+    def convert_to_traffic_color(self, id):
+        if id == 1:
+            return TrafficLight.GREEN
+        if id == 2:
+            return TrafficLight.RED
+        if id == 3:
+            return TrafficLight.YELLOW
 
         return TrafficLight.UNKNOWN

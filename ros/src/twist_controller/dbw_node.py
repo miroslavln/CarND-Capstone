@@ -31,6 +31,7 @@ that we have created in the `__init__` function.
 
 '''
 
+
 class DBWNode(object):
     def __init__(self):
         rospy.init_node('dbw_node', log_level=rospy.DEBUG)
@@ -45,6 +46,7 @@ class DBWNode(object):
         steer_ratio = rospy.get_param('~steer_ratio', 14.8)
         max_lat_accel = rospy.get_param('~max_lat_accel', 3.)
         max_steer_angle = rospy.get_param('~max_steer_angle', 8.)
+        min_speed = 5.0
 
         self.steer_pub = rospy.Publisher('/vehicle/steering_cmd',
                                          SteeringCmd, queue_size=1)
@@ -53,7 +55,7 @@ class DBWNode(object):
         self.brake_pub = rospy.Publisher('/vehicle/brake_cmd',
                                          BrakeCmd, queue_size=1)
 
-        self.controller = Controller(wheel_base, steer_ratio, 0.01, max_lat_accel,
+        self.controller = Controller(wheel_base, steer_ratio, min_speed, max_lat_accel,
                                      max_steer_angle, decel_limit, accel_limit,
                                      vehicle_mass, wheel_radius, fuel_capacity,
                                      brake_deadband)
@@ -68,7 +70,7 @@ class DBWNode(object):
         self.target_ang = None
         self.dwb_enabled = False
 
-        self.last_time = rospy.get_time()
+        self.prev_time = rospy.get_time()
         self.loop()
 
     def current_velocity_cb(self, msg):
@@ -83,21 +85,23 @@ class DBWNode(object):
         self.dwb_enabled = msg.data
 
     def loop(self):
-        rate = rospy.Rate(50) # 50Hz
+        rate = rospy.Rate(50)  # 50Hz
         while not rospy.is_shutdown():
             if self.cur_linear and self.target_linear:
                 # You should only publish the control commands if dbw is enabled
+
+                elapsed_time = rospy.get_time() - self.prev_time
+                self.prev_time = rospy.get_time()
+                elapsed_time = max(elapsed_time, 0.1)
+
                 if self.dwb_enabled:
-                    time_elapsed = rospy.get_time() - self.last_time
                     throttle, brake, steering = self.controller.control(self.cur_linear, self.cur_ang,
                                                                         self.target_linear, self.target_ang,
-                                                                        time_elapsed)
+                                                                        elapsed_time)
 
                     self.publish(throttle, brake, steering)
                 else:
                     self.controller.reset()
-
-                self.last_time = rospy.get_time()
 
             rate.sleep()
 

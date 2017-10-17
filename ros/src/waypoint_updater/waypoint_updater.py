@@ -132,6 +132,8 @@ class WaypointUpdater(object):
         for i in range(LOOKAHEAD_WPS):
             wp = self.base_waypoints[(index + i) % len(self.base_waypoints)]
             res.append(copy.deepcopy(wp))
+
+        assert(len(res) == LOOKAHEAD_WPS)
         return res
 
     def pose_cb(self, msg):

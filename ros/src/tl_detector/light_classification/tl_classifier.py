@@ -3,6 +3,7 @@ import rospy
 import numpy as np
 import tensorflow as tf
 import os
+import cv2
 
 class TLClassifier(object):
     def __init__(self, model_path):
@@ -20,8 +21,7 @@ class TLClassifier(object):
         self.image_tensor = self.sess.graph.get_tensor_by_name('image_tensor:0')
         self.detection_scores = self.sess.graph.get_tensor_by_name('detection_scores:0')
         self.detection_classes = self.sess.graph.get_tensor_by_name('detection_classes:0')
-        self.detection_boxes =  self.sess.graph.get_tensor_by_name('detection_boxes:0')
-
+        self.detection_boxes = self.sess.graph.get_tensor_by_name('detection_boxes:0')
 
     def get_classification(self, image):
         """Determines the color of the traffic light in the image
@@ -33,6 +33,7 @@ class TLClassifier(object):
             int: ID of traffic light color (specified in styx_msgs/TrafficLight)
 
         """
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         image = np.expand_dims(image, axis=0)
         scores, classes, boxes = self.sess.run([self.detection_scores, self.detection_classes, self.detection_boxes],
                                        feed_dict={self.image_tensor: image})

@@ -43,6 +43,8 @@ class TLDetector(object):
         self.image_count = 0
         self.last_save_image = rospy.get_time()
 
+        self.has_image = False
+
         sub1 = rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
         sub2 = rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
 
@@ -78,14 +80,19 @@ class TLDetector(object):
         """
         self.has_image = True
         self.camera_image = msg
-        light_wp, state = self.process_traffic_lights()
+        self.publish_traffic_light()
 
+    def publish_traffic_light(self):
+        if not self.has_image:
+            return
+
+        light_wp, state = self.process_traffic_lights()
         '''
-        Publish upcoming red lights at camera frequency.
-        Each predicted state has to occur `STATE_COUNT_THRESHOLD` number
-        of times till we start using it. Otherwise the previous stable state is
-        used.
-        '''
+            Publish upcoming red lights at camera frequency.
+            Each predicted state has to occur `STATE_COUNT_THRESHOLD` number
+            of times till we start using it. Otherwise the previous stable state is
+            used.
+            '''
         if self.state != state:
             self.state_count = 0
             self.state = state
@@ -122,22 +129,6 @@ class TLDetector(object):
 
         return index
 
-    def save_image(self, light):
-
-        if rospy.get_time() - self.last_save_image < 2.0:
-            return
-
-        self.last_save_image = rospy.get_time()
-
-        cv_image = self.bridge.imgmsg_to_cv2(self.camera_image, "bgr8")
-
-        folder = 'images/red/' if light.state == TrafficLight.RED else 'images/green/'
-
-        img_path = folder + 'img{}.jpg'.format(self.image_count)
-        self.image_count += 1
-        cv2.imwrite(img_path, cv_image)
-
-        rospy.logdebug('Image {} saved'.format(img_path))
 
     def project_to_image_plane(self, point_in_world):
         """Project point from 3D world coordinates to 2D camera image location
@@ -223,28 +214,19 @@ class TLDetector(object):
 
         time = rospy.get_time()
 
-        light = None
-
         # List of positions that correspond to the line to stop in front of for a given intersection
         stop_line_positions = self.config['stop_line_positions']
-
         car_position = self.pose.pose.position
-        index = 0
-        dist = float('inf')
+        car_wp = self.get_closest_waypoint(car_position.x, car_position.y)
 
-        for i, l in enumerate(stop_line_positions):
-            cur_dist = self.get_distance(car_position.x, car_position.y, l[0], l[1])
-            if cur_dist < dist:
-                dist = cur_dist
-                light = self.lights[i]
-                index = i
-
+        index = self.get_closest_stopline_index(car_position, stop_line_positions)
+        light = self.lights[index]
         light_wp = self.get_closest_waypoint(stop_line_positions[index][0], stop_line_positions[index][1])
 
-        if light:
+        if light:# and car_wp < light_wp:
             state = self.get_light_state(light)
             #state = light.state
-            rospy.logdebug_throttle(0.2, 'Light {}, State is {}/{} in {} ms'.format(light_wp, self.light_states[state],
+            rospy.logdebug_throttle(0.2, 'Light {}, Car {}, State is {}/{} in {} ms'.format(light_wp, car_wp, self.light_states[state],
                                                                                     self.light_states[light.state],
                                                                                     (rospy.get_time() - time) * 1000))
 
@@ -252,6 +234,16 @@ class TLDetector(object):
                 return light_wp, state
 
         return -1, TrafficLight.UNKNOWN
+
+    def get_closest_stopline_index(self, car_position, stop_line_positions):
+        index = 0
+        dist = float('inf')
+        for i, l in enumerate(stop_line_positions):
+            cur_dist = self.get_distance(car_position.x, car_position.y, l[0], l[1])
+            if cur_dist < dist:
+                dist = cur_dist
+                index = i
+        return index
 
 
 if __name__ == '__main__':
